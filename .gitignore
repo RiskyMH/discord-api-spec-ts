@@ -1,0 +1,4 @@
+discord-api-spec/
+build/
+node_modules/
+*.tgz

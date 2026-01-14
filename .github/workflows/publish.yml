@@ -1,0 +1,26 @@
+name: Publish npm packages
+on:
+ workflow_dispatch:
+ schedule:
+  - cron: '0 0 * * *'
+
+jobs:
+ npm-publish:
+  runs-on: ubuntu-latest
+  permissions:
+   contents: read
+   id-token: write
+  if: github.repository_owner == 'RiskyMH'
+
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-node@v4
+     with:
+      node-version: "*"
+      registry-url: "https://registry.npmjs.org"
+   - uses: oven-sh/setup-bun@v2
+   - run: bun install --frozen-lockfile
+   - run: bun run build
+   - run: bun pm pack --filename=discord-api-spec.tgz
+   - run: npm publish discord-api-spec.tgz --provenance --access public || true
+     name: Publish to npm

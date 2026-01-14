@@ -1,0 +1,48 @@
+{
+  "name": "discord-api-spec",
+  "version": "10.0.0",
+  "repository": "https://github.com/RiskyMH/discord-api-spec-ts",
+  "author": "RiskyMH",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./build/discord-api-spec.ts",
+      "default": "./build/discord-api-spec.js"
+    },
+    "./preview": {
+      "types": "./build/preview/discord-api-spec.ts",
+      "default": "./build/preview/discord-api-spec.js"
+    },
+    "./zod": {
+      "types": "./build/discord-api-spec.zod.js",
+      "default": "./build/discord-api-spec.zod.js"
+    },
+    "./preview/zod": {
+      "types": "./build/preview/discord-api-spec.zod.js",
+      "default": "./build/preview/discord-api-spec.zod.js"
+    }
+  },
+  "types": "./build/discord-api-spec.ts",
+  "main": "./build/discord-api-spec.js",
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/bun": "^1",
+    "zod": "^4"
+  },
+  "sideEffects": false,
+  "peerDependencies": {
+    "zod": "^4"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
+  "files": [
+    "build"
+  ],
+  "private": false
+}
