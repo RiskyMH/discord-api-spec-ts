@@ -549,8 +549,14 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
   }
 
   for (const methods of Object.values<any>(openapi.paths || {})) {
+    const pathParams = Array.isArray((methods as any)?.parameters) ? (methods as any).parameters : [];
     for (const op of Object.values<any>(methods || {})) {
       if (!op || typeof op !== "object") continue;
+      if (Array.isArray(pathParams)) {
+        for (const p of pathParams) {
+          if (p?.schema) markSchema(p.schema);
+        }
+      }
       if (Array.isArray(op.parameters)) {
         for (const p of op.parameters) {
           if (p.schema) markSchema(p.schema);
@@ -621,8 +627,10 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
         paramGroups[p.in || "path"]?.push({ name: p.name, type: t, required: p.required });
       };
 
-      if (Array.isArray(op.parameters)) {
-        for (const p of op.parameters) {
+      const inheritedParams = Array.isArray((methods as any)?.parameters) ? (methods as any).parameters : [];
+      const mergedParams = [...inheritedParams, ...(Array.isArray(op.parameters) ? op.parameters : [])];
+      if (mergedParams.length) {
+        for (const p of mergedParams) {
           if (p?.$ref) {
             const resolved = resolveParameterRef(p.$ref);
             if (resolved) collectParam(resolved);
