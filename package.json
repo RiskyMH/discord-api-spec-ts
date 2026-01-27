@@ -7,19 +7,19 @@
   "exports": {
     ".": {
       "types": "./build/discord-api-spec.ts",
-      "default": "./build/discord-api-spec.js"
+      "import": "./build/discord-api-spec.js"
     },
     "./preview": {
       "types": "./build/preview/discord-api-spec.ts",
-      "default": "./build/preview/discord-api-spec.js"
+      "import": "./build/preview/discord-api-spec.js"
     },
     "./zod": {
       "types": "./build/discord-api-spec.zod.js",
-      "default": "./build/discord-api-spec.zod.js"
+      "import": "./build/discord-api-spec.zod.js"
     },
     "./preview/zod": {
       "types": "./build/preview/discord-api-spec.zod.js",
-      "default": "./build/preview/discord-api-spec.zod.js"
+      "import": "./build/preview/discord-api-spec.zod.js"
     }
   },
   "types": "./build/discord-api-spec.ts",
