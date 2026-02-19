@@ -72,10 +72,8 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
     return applyChecks(expr, checks);
   };
   const zEnumSchema = (values: any[]) => {
-    if (values.every((v) => typeof v === "string")) {
-      return (`/* @__PURE__ */ z.enum([${values.map((v) => JSON.stringify(v)).join(", ")}])`);
-    }
-    return (`/* @__PURE__ */ z.union([${values.map((v) => `/* @__PURE__ */ z.literal(${JSON.stringify(v)})`).join(", ")}])`);
+    if (values.length === 1) return (`/* @__PURE__ */ z.literal(${JSON.stringify(values[0])})`);
+    return (`/* @__PURE__ */ z.literal([${values.map((v) => JSON.stringify(v)).join(", ")}])`);
   };
 
   // --- collect enums ---
@@ -274,11 +272,25 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
 
     if (Array.isArray(schema.oneOf)) {
       if (!schema.oneOf.length) return schema.type ? zPrimitive(schema.type) : ("/* @__PURE__ */ z.undefined()");
+      if (schema.oneOf.length === 1) return zodFromSchema(schema.oneOf[0]);
+      if (schema.oneOf.length === 2 && schema.oneOf.some((s: any) => s.type === "null")) {
+        const nonNullSchema = schema.oneOf.find((s: any) => s.type !== "null");
+        if (nonNullSchema) {
+          return `/* @__PURE__ */ z.nullable(${zodFromSchema(nonNullSchema)})`;
+        }
+      }
       return (`/* @__PURE__ */ z.union([${schema.oneOf.map((s: any) => zodFromSchema(s)).join(", ")}])`);
     }
     if (Array.isArray(schema.anyOf)) {
       if (!schema.anyOf.length) return schema.type ? zPrimitive(schema.type) : ("/* @__PURE__ */ z.undefined()");
-      return (`/* @__PURE__ */ z.union([${schema.anyOf.map((s: any) => zodFromSchema(s)).join(", ")}])`);
+      if (schema.anyOf.length === 1) return `/* @__PURE__ */ z.optional(${zodFromSchema(schema.anyOf[0])})`;
+      if (schema.anyOf.length === 2 && schema.anyOf.some((s: any) => s.type === "null")) {
+        const nonNullSchema = schema.anyOf.find((s: any) => s.type !== "null");
+        if (nonNullSchema) {
+          return `/* @__PURE__ */ z.nullable(${zodFromSchema(nonNullSchema)})`;
+        }
+      }
+      return (`/* @__PURE__ */ z.union([/* @__PURE__ */ z.undefined(), ${schema.anyOf.map((s: any) => zodFromSchema(s)).join(", ")}])`);
     }
     if (Array.isArray(schema.allOf)) {
       if (!schema.allOf.length) return schema.type ? zPrimitive(schema.type) : ("/* @__PURE__ */ z.undefined()");
@@ -289,7 +301,12 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
       const variants = schema.type.map((t: string) => {
         if (t === "null") return "/* @__PURE__ */ z.null()";
         return zodFromSchema({ ...schema, type: t });
-      });
+      }) as string[];
+      if (variants.length === 1) return variants[0]!;
+      if (variants.length === 2 && variants.some(v => v === "/* @__PURE__ */ z.null()")) {
+        const nonNullVariant = variants.find(v => v !== "/* @__PURE__ */ z.null()");
+        if (nonNullVariant) return `/* @__PURE__ */ z.nullable(${nonNullVariant})`;
+      }
       return `/* @__PURE__ */ z.union([${variants.join(", ")}])`;
     }
 
@@ -303,8 +320,9 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
     if (schema.type === "object" || schema.properties) {
       const props = schema.properties || {};
       const entries = Object.entries<any>(props).map(([k, v]) => {
-        const base = `${JSON.stringify(k)}: ${zodFromSchema(v)}`;
-        return v && v.nullable ? `${base}.nullable()` : base;
+        const required = schema.required && Array.isArray(schema.required) ? schema.required.includes(k) : false;
+        const type = required ? zodFromSchema(v) : `/* @__PURE__ */ z.optional(${zodFromSchema(v)})`;
+        return `${JSON.stringify(k)}: ${type}`;
       });
       const additional = schema.additionalProperties;
       let ap: string | null = null;
@@ -315,7 +333,7 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
       }
 
       const body = entries.length ? `{ ${entries.join(", ")} }` : "{}";
-      let baseObj = schema.required ? `/* @__PURE__ */ z.strictObject(${body})` : `/* @__PURE__ */ z.object(${body})`;
+      let baseObj = `/* @__PURE__ */ zObject(${body})`;
 
       const objChecks: string[] = [];
       if (typeof schema.minProperties === "number") objChecks.push(`/* @__PURE__ */ z.minLength(${schema.minProperties})`);
@@ -731,7 +749,18 @@ export type ${responsesAlias} = ${pathAccessor}["responses"];
   fs.mkdirSync("./build", { recursive: true });
   await Bun.write(outFile, output);
   await Bun.write(outFileJs, outputJs);
-  await Bun.write(outFileZod, "/* AUTO-GENERATED. DO NOT EDIT. */\n\nimport * as z from 'zod/mini';\n\n" + componentsZodOut.replaceAll("/* @__PURE__ */ /* @__PURE__ */", "/* @__PURE__ */"));
+  await Bun.write(outFileZod, `/* AUTO-GENERATED. DO NOT EDIT. */
+
+import * as z from 'zod/mini';
+
+let zObject = z.object;
+export const setStrictObject = (strict) => zObject = strict ? z.strictObject : z.object;
+
+` + componentsZodOut
+      .replaceAll("/* @__PURE__ */ /* @__PURE__ */", "/* @__PURE__ */")
+      .replaceAll("z.optional(/* @__PURE__ */ z.nullable(/* @__PURE__ */ ", "z.nullish((/* @__PURE__ */ ")
+      .replaceAll("z.nullable(/* @__PURE__ */ z.optional(/* @__PURE__ */ ", "z.nullish((/* @__PURE__ */ ")
+  );
   console.log(`✅ Wrote ${outFile} (TS) and ${outFileJs} (JS) with enums, components, and paths.`);
 
   await Bun.$`bunx oxfmt ${outFile}`.quiet();
