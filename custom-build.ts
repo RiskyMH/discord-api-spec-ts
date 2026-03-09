@@ -198,9 +198,14 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
       if (!allFound) continue;
 
       markEnumUse(refName);
-      if (values.length === 1 && mappedEnum) {
-        const idx = mappedEnum.values.findIndex((v) => v === values[0]);
-        if (idx >= 0) return `${toTypeName(refName)}.${toTypeName(mappedEnum.varnames[idx]!)}`;
+      if (mappedEnum) {
+        const matchedIndices = values.map((v) => mappedEnum.values.findIndex((e) => e === v)).filter((idx) => idx >= 0);
+        if (matchedIndices.length === values.length) {
+          if (candidateValues.length === values.length) {
+            return toTypeName(refName);
+          }
+          return matchedIndices.map((idx) => `${toTypeName(refName)}.${toTypeName(mappedEnum.varnames[idx]!)}`).join(" | ").trim();
+        }
       }
       return toTypeName(refName);
     }
@@ -593,7 +598,6 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
   let componentsOut = "";
   let componentsZodOut = "";
   for (const [name, schema] of Object.entries<any>(openapi.components?.schemas ?? {})) {
-    if (!usedComponents.has(toTypeName(name)) && !usedComponents.has(name)) continue;
     if (enums[name]) {
       const e = enums[name];
       const doc = schema.description || schema.title || e.doc;
@@ -674,9 +678,18 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
       const { type: requestType } = hasRequestBody ? pickContentType(op.requestBody.content) : { type: "undefined" };
       let responses = "{\n";
       if (op.responses && isObject(op.responses)) {
-        for (const [code, resp] of Object.entries<any>(op.responses)) {
-          const { type: rType } = resp.content ? pickContentType(resp.content) : { type: "unknown" };
-          const doc = resp.description ? `/** ${String(resp.description).replace(/\n/g, ' ')} */\n    ` : "";
+        for (const [code, respOrig] of Object.entries<any>(op.responses)) {
+          let resp = respOrig;
+          let depth = 0;
+          while (resp && resp.$ref && depth < 10) {
+            const refKey = resp.$ref.split("/").pop();
+            const deref = openapi.components?.responses?.[refKey!];
+            if (!deref) break;
+            resp = deref;
+            depth++;
+          }
+          const { type: rType } = resp && resp.content ? pickContentType(resp.content) : { type: "unknown" };
+          const doc = resp && resp.description ? `/** ${String(resp.description).replace(/\n/g, ' ')} */\n    ` : "";
           responses += `    ${doc}${JSON.stringify(code)}: ${rType};\n`;
         }
       }
@@ -705,6 +718,11 @@ export type ${responsesAlias} = ${pathAccessor}["responses"];
       pathsOut += `      parameters: {\n        path?: ${paramType("path")};\n        query?: ${paramType("query")};\n        header?: ${paramType("header")};\n        cookie?: ${paramType("cookie")};\n      };\n`;
       pathsOut += `      requestBody?: ${requestType};\n`;
       pathsOut += `      responses: ${responses};\n`;
+
+      let security = typeof op.security !== 'undefined' ? op.security : methods.security;
+      if (typeof security === 'undefined') security = undefined;
+      const securityTs = security !== undefined ? JSON.stringify(security) : 'undefined';
+      pathsOut += `      security: ${securityTs};\n`;
       pathsOut += "    };\n";
     }
     pathsOut += "  };\n";
