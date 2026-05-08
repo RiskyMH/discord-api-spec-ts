@@ -161,8 +161,6 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
       for (const [name, e] of Object.entries(enums)) {
         const idx = e.values.findIndex((v) => v === val);
         if (idx >= 0) {
-          // skip inappropriate enums like command option types; prefer component/message enums by prefix
-          if (/CommandOptionType/i.test(name)) continue;
           markEnumUse(name);
           return `${toTypeName(name)}.${toTypeName(e.varnames[idx]!)}`;
         }
@@ -382,21 +380,32 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
 
     // enum / const with enum mapping
     if (Array.isArray(schema.enum)) {
-      // Try: direct match to declared enum
-      const mapped = mapEnumForEnum(schema.enum);
-      if (mapped) {
-        schemaCache.set(schema, mapped);
-        return mapped;
-      }
-      // Try: enum values with allOf reference to an enum schema
-      const mappedAllOf = schema.allOf ? mapEnumFromAllOf(schema.enum, schema.allOf) : null;
-      if (mappedAllOf) {
-        schemaCache.set(schema, mappedAllOf);
-        return mappedAllOf;
-      }
-      const literals = schema.enum.map((v: any) => JSON.stringify(v)).join(" | ");
-      schemaCache.set(schema, literals);
-      return literals;
+        // if enum is empty but allOf is present with a $ref, use the referenced type.
+        if (schema.enum.length === 0 && Array.isArray(schema.allOf)) {
+            for (const entry of schema.allOf) {
+                if (entry && entry.$ref) {
+                    const refName = resolveRef(entry.$ref);
+                    markComponent(refName);
+                    schemaCache.set(schema, refName);
+                    return refName;
+                }
+            }
+        }
+        // direct match to declared enum
+        const mapped = mapEnumForEnum(schema.enum);
+        if (mapped) {
+            schemaCache.set(schema, mapped);
+            return mapped;
+        }
+        // enum values with allOf reference to an enum schema
+        const mappedAllOf = schema.allOf ? mapEnumFromAllOf(schema.enum, schema.allOf) : null;
+        if (mappedAllOf) {
+            schemaCache.set(schema, mappedAllOf);
+            return mappedAllOf;
+        }
+        const literals = schema.enum.map((v: any) => JSON.stringify(v)).join(" | ");
+        schemaCache.set(schema, literals);
+        return literals;
     }
     if (schema.const !== undefined) {
       const mapped = mapEnumForConst(schema.const);
@@ -668,7 +677,7 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
         let s = "{\n";
         for (const p of arr) {
           const optional = p.required ? "" : "?";
-          s += `    ${p.name}${optional}: ${p.type};\n`;
+          s += `    ${p.name}${optional}: ${p.type || "unknown"};\n`;
         }
         s += "  }";
         return s;
