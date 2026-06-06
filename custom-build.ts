@@ -391,32 +391,34 @@ export async function build({ srcFile, outFile, outFileJs, outFileZod }: BuildOp
                 }
             }
         }
+        // When allOf is present, prefer the type referenced by it over an accidental
+        // exact match from an unrelated enum with the same values.
+        const mappedAllOf = schema.allOf ? mapEnumFromAllOf(schema.enum, schema.allOf) : null;
+        if (mappedAllOf) {
+            schemaCache.set(schema, mappedAllOf);
+            return mappedAllOf;
+        }
         // direct match to declared enum
         const mapped = mapEnumForEnum(schema.enum);
         if (mapped) {
             schemaCache.set(schema, mapped);
             return mapped;
         }
-        // enum values with allOf reference to an enum schema
-        const mappedAllOf = schema.allOf ? mapEnumFromAllOf(schema.enum, schema.allOf) : null;
-        if (mappedAllOf) {
-            schemaCache.set(schema, mappedAllOf);
-            return mappedAllOf;
-        }
         const literals = schema.enum.map((v: any) => JSON.stringify(v)).join(" | ");
         schemaCache.set(schema, literals);
         return literals;
     }
     if (schema.const !== undefined) {
-      const mapped = mapEnumForConst(schema.const);
-      if (mapped) {
-        schemaCache.set(schema, mapped);
-        return mapped;
-      }
+      // When allOf is present, prefer the type referenced by it
       const mappedAllOf = schema.allOf ? mapEnumFromAllOf([schema.const], schema.allOf) : null;
       if (mappedAllOf) {
         schemaCache.set(schema, mappedAllOf);
         return mappedAllOf;
+      }
+      const mapped = mapEnumForConst(schema.const);
+      if (mapped) {
+        schemaCache.set(schema, mapped);
+        return mapped;
       }
       const lit = JSON.stringify(schema.const);
       schemaCache.set(schema, lit);
