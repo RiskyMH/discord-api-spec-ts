@@ -792,8 +792,10 @@ export const setStrictObject = (strict) => zObject = strict ? z.strictObject : z
   );
   console.log(`✅ Wrote ${outFile} (TS) and ${outFileJs} (JS) with enums, components, and paths.`);
 
+  fs.renameSync(".gitignore", ".backup_gitignore");
   await Bun.$`bunx oxfmt ${outFile}`.quiet();
   await Bun.$`bunx oxfmt ${outFileZod}`.quiet();
+  fs.renameSync(".backup_gitignore", ".gitignore");
 }
 
 
